@@ -1,0 +1,586 @@
+# MVP pack — Générateur de vidéos d’histoires pour enfants (IA)
+
+Ce document te donne tout le nécessaire pour lancer un MVP : prompts, schéma JSON, pipeline vidéo (FFmpeg), pages du site, pricing, conformité, et un **prompt unique** prêt à coller dans **manus.im** pour générer ton site en une demande.
+
+---
+
+## 1) Positionnement & promesse
+
+* **Proposition de valeur** : crée des histoires vidéo personnalisées pour enfants en quelques clics, avec personnages/lieux/thèmes au choix, voix naturelles (H/F, FR/EN/PT), et exports MP4 + MP3 + PDF livre illustré.
+* **Public** : parents de 3–9 ans, éducateurs, écoles maternelles/primaires.
+* **Différenciants** : cohérence des personnages (cartes-personnages), mode dodo (rythme lent), multi-langue, produits dérivés auto (MP3, PDF, coloriages).
+
+---
+
+## 2) Questionnaire utilisateur (formulaire de brief)
+
+**Champs (obligatoires sauf mention)**
+
+1. Âge de l’enfant (liste) : 3–4, 5–6, 7–9
+2. Langue principale : FR, EN, PT (extensible)
+3. Durée cible : 60–90 s, 120–180 s, 180–240 s
+4. Thème (liste déroulante) : pirates, forêt magique, dinosaures, espace, animaux de la ferme, super-héros, princesse/prince, amitié à l’école, fête d’anniversaire, mer, montagne, château
+5. **Personnage principal** : prénom (texte) + traits (gentil·le, curieux·se, courageux·se, drôle…)
+6. **Personnage secondaire** (optionnel) : idem
+7. Lieu principal : château, forêt, mer, maison, école, ferme, ville, montagne, espace
+8. Morale / message : amitié, partage, courage, persévérance, bienveillance, confiance en soi, curiosité
+9. Style visuel préféré : aquarelle, cartoon 2D, livre illustré vintage, 3D doux, papier découpé
+10. Style de narration : enjoué, apaisant (dodo), épique mais doux, humoristique
+11. Voix : femme douce FR, homme apaisant FR, femme FR-CA, femme PT-BR, homme EN GB… (catalogue extensible)
+12. Nom du parent (pour intro personnalisée) — optionnel
+
+**Validation & garde-fous**
+
+* Interdire marques/personnages sous droit (Disney, Marvel…), informations personnelles sensibles (adresse exacte, école précise), thèmes violents/adultes.
+* Vérifier longueur des prénoms (<= 20 caractères), pas d’emojis dans le prénom.
+
+---
+
+## 3) Schéma JSON de sortie (storyboard)
+
+Le générateur d’histoire produit **un JSON de scènes**. Limiter à 6–12 scènes (selon durée). **Max 35–55 mots** par scène pour la narration.
+
+```json
+{
+  "meta": {
+    "language": "fr",
+    "target_age": "5-6",
+    "duration_sec": 120,
+    "mood": "apaisant",
+    "style": "aquarelle",
+    "moral": "amitié",
+    "title": "Aventure au château des nuages"
+  },
+  "characters": [
+    {"name": "Léna", "age": 6, "traits": ["curieuse", "courageuse"], "visual_card": "fillette châtain, robe jaune, chapeau bleu"},
+    {"name": "Milo", "species": "chat", "traits": ["drôle", "malin"], "visual_card": "petit chat gris à foulard vert"}
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "narration": "Léna découvre un escalier secret menant au château des nuages…",
+      "duration_sec": 12,
+      "visual_prompt": "aquarelle, fillette châtain robe jaune, escalier nuageux vers un château vaporeux, tons pastel, lumière dorée, style livre pour enfants",
+      "subtitle": "Léna monte l’escalier des nuages."
+    },
+    {
+      "id": 2,
+      "narration": "Au sommet, elle rencontre Milo, un chat qui parle et adore les devinettes…",
+      "duration_sec": 10,
+      "visual_prompt": "aquarelle, petit chat gris foulard vert, remparts de nuages, ciel rose, ambiance douce",
+      "subtitle": "Milo adore les devinettes."
+    }
+  ],
+  "closing": {
+    "narration": "Léna et Milo redescendent, heureux d’avoir partagé cette aventure. L’amitié rend tout plus léger.",
+    "subtitle": "L’amitié rend tout plus léger."
+  }
+}
+```
+
+---
+
+## 4) Prompt LLM — génération d’histoire → JSON
+
+**Rôle système (coller tel quel)**
+
+```
+Tu es un scénariste spécialisé en histoires pour enfants de 3 à 9 ans. Tu produis un **storyboard JSON** structuré (voir schéma) en respectant :
+- Vocabulaire simple, phrases courtes, tonalité bienveillante.
+- 6–12 scènes selon la durée cible (60–240 s).
+- 35–55 mots de narration par scène (max), 1 sous-titre court par scène.
+- Aucune marque/personnage sous droit. Zéro contenu violent/effrayant/romantique adulte.
+- Cohérence visuelle : fournis pour chaque scène un **visual_prompt** décrivant les éléments clés (personnage principal/secondaire, lieu, couleurs, style), en restant dans le style choisi (aquarelle/cartoon/etc.).
+- Le JSON doit être **valide** et **auto-suffisant**.
+```
+
+**Prompt utilisateur (template)**
+
+```
+Crée un storyboard JSON pour une histoire d’enfant basée sur ce brief :
+- Âge: {{age}}
+- Langue: {{langue}}
+- Durée cible: {{duree}}
+- Thème: {{theme}}
+- Personnage principal: {{prenom_principal}} (traits: {{traits_principal}})
+- Personnage secondaire: {{prenom_secondaire_ou_type}} (traits: {{traits_secondaire}})
+- Lieu: {{lieu}}
+- Morale: {{morale}}
+- Style visuel: {{style}}
+- Ton de narration: {{ton}}
+- Introduction personnalisée (optionnel): {{intro_parent}}
+
+Rends **uniquement** le JSON conforme au schéma, sans texte additionnel.
+```
+
+---
+
+## 5) Génération d’images (mode “Album animé”)
+
+Pour chaque scène, on génère **une image 1920×1080** d’aspect fixe afin d’appliquer un effet **pan & zoom**.
+
+**Prompt image (template)**
+
+```
+{{visual_prompt_de_la_scene}}, résolution 1920x1080, composition claire, lisible pour enfants, personnages expressifs, éviter le texte incrusté.
+```
+
+**Cohérence personnages**
+
+* Conserver une **visual\_card** par personnage (ex: « fillette châtain, robe jaune, chapeau bleu ») et l’insérer **systématiquement** dans le prompt de chaque scène où il apparaît.
+
+---
+
+## 6) Audio : voix + musique
+
+* **Voix (TTS)** : utiliser l’ID de voix sélectionnée → produire un **MP3 par scène** (*voice\_s01.mp3*, …) pour synchroniser précisément à la durée.
+* **BGM (musique)** : une piste libre de droits en fond, avec **ducking** automatique (sidechain) pour baisser la musique sous la voix.
+
+---
+
+## 7) Pipeline vidéo (FFmpeg — mode Album)
+
+**1) Créer un clip par scène (pan & zoom + sous-titre burnt-in)**
+
+Exemple pour la scène 1 :
+
+```
+ffmpeg -loop 1 -i scene01.png -i voice01.mp3 -y \
+  -filter_complex "[0:v]scale=1920:1080,zoompan=z='min(zoom+0.0015,1.15)':d=\n(30*DUR):s=1920x1080:fps=30,format=yuv420p[v]; \
+  [v]drawtext=fontfile=/path/Roboto-Regular.ttf:text='L\'éna monte l\'escalier des nuages.':\
+  fontcolor=white:fontsize=42:box=1:boxcolor=black@0.4:boxborderw=16:x=(w-text_w)/2:y=h-120[v2]" \
+  -map "[v2]" -map 1:a -c:v libx264 -preset veryfast -tune stillimage -shortest scene01.mp4
+```
+
+Remplace **DUR** par la durée de la scène en secondes.
+
+**2) Concaténer toutes les scènes**
+Créer un fichier `concat.txt` :
+
+```
+file 'scene01.mp4'
+file 'scene02.mp4'
+...
+```
+
+Puis :
+
+```
+ffmpeg -f concat -safe 0 -i concat.txt -c copy temp_concat.mp4
+```
+
+**3) Ajouter musique + ducking sous la voix**
+
+```
+ffmpeg -i temp_concat.mp4 -i music.mp3 -y \
+  -filter_complex "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice]; \
+                   [1:a]volume=0.3[mus]; \
+                   [mus][voice]sidechaincompress=threshold=0.05:ratio=8:attack=5:release=250[outa]" \
+  -map 0:v -map "[outa]" -c:v copy -c:a aac -b:a 192k output_album.mp4
+```
+
+**4) Export MP3 narratif seul**
+
+```
+ffmpeg -i temp_concat.mp4 -map 0:a -c:a mp3 story_audio.mp3
+```
+
+---
+
+## 8) Pipeline vidéo (clips IA — option Animation)
+
+* Par scène, générer un **clip court** (5–10 s)
+* **Contraintes** : garder le même style, couleurs, personnages (reformuler prompts avec visual\_card + actions simples).
+* Assemblage identique à la concat, puis ajouter musique/ducking (mêmes commandes que ci-dessus).
+
+---
+
+## 9) Export PDF (livre illustré) + coloriages
+
+* Pour chaque scène, créer une page : image pleine largeur + texte narration (gros corps, interlignage 1.4).
+* Générer un **PDF A4** (recto), ajouter une page de **coloriage** en désaturant l’image (ou en régénérant en « line art »).
+
+---
+
+## 10) Modèle économique (suggestion)
+
+* **Free** : 1 vidéo album / mois, 60–90 s, 720p, watermark, 1 voix.
+* **Starter (9–12 CHF/mois)** : 4 vidéos jusqu’à 3 min, 1080p, 5 voix, MP3.
+* **Family (19–24 CHF/mois)** : 12 vidéos/mois, bibliothèque persos, personnage récurrent.
+* **École (29–49 CHF/mois)** : usage en classe, PDF livre, 1080p illimité (album).
+* **Add-on Animation IA** : 3–5 CHF/min (vendu en crédits).
+
+**Mesures anti-coûts** : cache audio/images si régénération sans changement; limiter les ré-renders gratuits; file d’attente asynchrone.
+
+---
+
+## 11) Pages du site (contenu prêt)
+
+**Home**
+
+* Hero: « Des histoires vidéo personnalisées en 60 secondes. »
+* CTA: Créer une histoire • Voir exemples • Commencer gratuit
+* Sections: Comment ça marche (3 étapes), Exemples (3 mini-vidéos), Avis parents, Sécurité & confidentialité, FAQ courte, CTA pricing
+
+**Créer une histoire (formulaire stepper)**
+
+* Étapes: Brief → Personnages → Style & voix → Aperçu → Export
+* Afficher estimation de durée/coût avant génération
+
+**Ma bibliothèque**
+
+* Vignettes des histoires, boutons: Lire MP4, Télécharger MP3/PDF, Régénérer
+
+**Tarifs**
+
+* Tableau des plans + crédits animation
+
+**FAQ** (exemples)
+
+* Les histoires conviennent à quel âge ?
+* Puis-je choisir la voix ?
+* Les données de mon enfant sont-elles protégées ?
+* Puis-je annuler quand je veux ?
+
+**Mentions légales / CGU / Confidentialité**
+
+* Usage destiné aux parents/enseignants (comptes majeurs). Pas de publicité personnalisée aux enfants. Données minimales.
+
+**Contact**
+
+* Formulaire + adresse email support
+
+---
+
+## 12) Conformité & sécurité (résumé)
+
+* Comptes **parents/adultes** uniquement ; pas de profilage d’enfants.
+* Filtre de prompts : refuser contenu sensible (violence, identifiants perso, marques).
+* Double opt-in email, politique de confidentialité claire (nLPD/GDPR), consentement cookies uniquement contextuel.
+
+---
+
+## 13) Evénements & webhooks (spécification légère)
+
+* `POST /api/generate-story`  → renvoie `job_id`
+* `POST /api/generate-album-video`  (à partir du JSON) → `job_id`
+* `POST /api/generate-animated-clips`  → `job_id`
+* `GET /api/status?job_id=...` → {status: queued|running|done|error, urls}
+* `POST /api/webhook/stripe` → facturation, limites, crédits
+* `POST /api/webhook/tts` → callback audio prêt
+* `POST /api/webhook/video` → callback vidéo prête
+
+**Objet Story minimal (DB)**
+
+```
+Story { id, user_id, created_at, meta(json), json_story(json), assets(json), plan, credits_used, status }
+```
+
+---
+
+## 14) Prompt « tout-en-un » pour manus.im
+
+> **Copie/colle l’intégralité du bloc ci-dessous dans manus.im**
+
+```
+Titre du site : Histoires Magiques — Générateur de vidéos pour enfants
+
+Objectif : Créer un site complet prêt à l’emploi (FR/EN), avec pages, formulaires, bibliothèque utilisateur, pricing, et placeholders pour intégrations (Stripe, TTS, rendu vidéo). Style moderne, chaleureux, accessible.
+
+Identité visuelle :
+- Palette : bleu #3555FF, rose #FF5CA8, jaune doux #FFD659, vert menthe #4AD1A7, gris ardoise #0F172A
+- Typographies : Titres = Poppins, Corps = Inter
+- Illustrations : pictos simples, badges arrondis, ombres douces
+
+Pages & sections :
+1) Accueil
+   - Hero avec grand titre : « Des histoires vidéo personnalisées en 60 secondes. »
+   - Sous-titre : « Choisissez le thème, les héros, la voix — nous créons la magie. »
+   - CTAs : [Créer une histoire] [Voir des exemples] [Commencer gratuitement]
+   - Bloc “Comment ça marche” (3 cartes numérotées) : Brief → Génération → Téléchargement
+   - Carrousel d’exemples (3 vidéos demo muettes + légendes)
+   - Bloc “Parents rassurés” : 3 bullets (données minimales, voix naturelles, contenu bienveillant)
+   - Bandeau « Commencer gratuit »
+
+2) Créer une histoire (formulaire en 5 étapes — stepper, avec prévisualisation récap)
+   - Étape 1 — Infos : âge (3–4,5–6,7–9), langue (FR/EN), durée (60–90,120–180,180–240), thème (liste), lieu (liste), morale (liste)
+   - Étape 2 — Personnages : prénom + traits pour principal ; secondaire optionnel ; contrôles anti-marques et mots interdits
+   - Étape 3 — Style & voix : style visuel (aquarelle, cartoon 2D, 3D doux, papier découpé), ton de narration (apaisant, enjoué, etc.), voix (H/F, FR/EN)
+   - Étape 4 — Estimation & options : affichage du coût indicatif (selon plan et durée), checkbox watermark pour version gratuite
+   - Étape 5 — Récapitulatif + bouton « Générer » → affichage d’un écran d’attente (queue) + email de notification une fois prêt
+   - Après génération : page “Résultat” avec lecteur vidéo, boutons Télécharger MP4/MP3/PDF, bouton Régénérer (consomme quota)
+
+   - **Back-end à préparer (placeholders)** :
+     - POST /api/generate-story (retour: job_id)
+     - POST /api/generate-album-video (job_id)
+     - GET /api/status?job_id=…
+     - POST /api/webhook/tts ; POST /api/webhook/video ; POST /api/webhook/stripe
+
+3) Ma bibliothèque
+   - Grille de vignettes (affiche titre, durée, étiquette langue)
+   - Filtres : langue, durée, thème
+   - Actions par carte : Lire, Télécharger MP4, Télécharger MP3, Télécharger PDF, Partager lien privé
+
+4) Tarifs
+   - Cartes plans : Free / Starter / Family / École (+ crédits Animation IA)
+   - Free : 1 vidéo 60–90 s/mois, 720p, watermark, 1 voix
+   - Starter : 4 vidéos ≤3 min/mois, 1080p, 5 voix, MP3
+   - Family : 12 vidéos/mois, perso récurrent, MP3 & PDF
+   - École : 1080p illimité (album), 30 élèves, PDF livres
+   - Bandeau « Crédits animation IA » : 3–5 CHF/min ; explication claire
+   - Comparatif des features en tableau
+
+5) Exemples
+   - 6 cartes « exemple » (miniatures + descriptions), pages détail avec histoire fictive, images de scènes, démo vidéo muette
+
+6) FAQ
+   - 10 questions/réponses types (âge, voix, confidentialité, annulation, etc.)
+
+7) À propos / Contact
+   - Histoire du projet, formulaire de contact, email support
+
+8) Mentions légales / CGU / Confidentialité
+   - Texte clair : service destiné aux parents/enseignants (compte adulte), aucune publicité personnalisée aux enfants, données minimales, droit d’effacement
+
+Fonctionnalités transversales :
+- Authentification (email + magic link). Tableau de bord utilisateur minimal.
+- Compteur de quotas & crédits (affiché dans l’avatar menu)
+- Intégration Stripe (placeholder) : plans + paiements récurrents + crédits à l’acte
+- Internationalisation FR/EN (switch dans le header). Tous les textes fournis avec clés i18n.
+- Toasts et états vides soignés (espace de chargement avec messages empathiques)
+- Accessibilité : contrastes AA, focus visibles, tailles de police 16+.
+- Footer : liens légaux, réseaux, contact.
+
+Design system :
+- Boutons pleins (primaire bleu), secondaires « ghost », inputs arrondis xl, cartes ombrées douces, icônes simples.
+
+Textes (FR par défaut, fournir aussi clés EN) :
+- Titre hero : « Des histoires vidéo personnalisées en 60 secondes. »
+- Sous-titre hero : « Choisissez le thème, les héros, la voix — nous créons la magie. »
+- CTA principal : « Créer une histoire »
+- Section “Comment ça marche” : titres courts « 1. Renseignez », « 2. Générez », « 3. Téléchargez »
+
+Sécurité & conformité (affichage pied de page + page dédiée) :
+- « Service destiné aux parents/adultes. Pas de profilage d’enfants. Données minimales. »
+- « Vous pouvez demander la suppression de vos données à tout moment. »
+
+Livrables manus.im :
+- Site multi-pages, navigation, formulaires avec validations, états vides, pages pricing/FAQ/CGU/Confidentialité, i18n FR/EN.
+- Zones « code » ou « actions » connectables ultérieurement aux endpoints cités.
+```
+
+---
+
+## 15) Checklist lancement
+
+* [ ] Nom de domaine + branding minimum
+* [ ] 3 histoires exemples (album) déjà générées
+* [ ] Page Tarifs active + Stripe en test mode
+* [ ] Politique confidentialité + CGU publiées
+* [ ] Email de bienvenue + modèle « histoire prête »
+* [ ] Tableau de suivi : coûts/minute, taux de complétion, rétention
+
+---
+
+## 16) Idées d’itérations
+
+* Personnage récurrent « carte » enregistrée dans le compte (cohérence multi-histoires)
+* Mode « nuit » : bruitages doux + animation plus lente
+* Partage familial : 2–3 sous-comptes enfants (sans collecte d’info sensible)
+* Espace enseignant : import liste de prénoms → historier de groupe
+
+---
+
+## 17) Checklist **ultra-complète** des infos & accès à me fournir
+
+> Objectif : que manus.im génère un site **opérationnel** en une passe, avec PayPal (abos + crédits), ElevenLabs (voix), stockage, e-mails, analytics, légal. Idéalement, envoie-moi ces éléments **tels quels** (ou remplis-les dans le prompt manus.im ci-dessous).
+
+### A. Identité & légal
+
+* **Nom légal de l’entreprise** + forme (ex. Body-Up Sàrl)
+* **Adresse postale complète** (obligation mentions légales & PayPal)
+* **E-mail support** (ex. [support@tondomaine.ch](mailto:support@tondomaine.ch)) et **e-mail légal** (DPO/RGPD)
+* **Pays** d’établissement (Suisse) + **TVA** : assujetti ? n° TVA (si oui)
+* **Nom du site / marque** + slogan (ex. « Histoires Magiques — Générateur de vidéos pour enfants »)
+
+### B. Domaine & e-mail d’envoi
+
+* **Domaine** (ex. histoires-magiques.ch) + accès DNS (Cloudflare si possible)
+* **Expéditeur e-mail** (From) : « Nom [support@domaine](mailto:support@domaine) »
+* **SMTP** (ou Sendgrid/Mailgun) : host, port, user, pass
+* Prévois **SPF/DKIM/DMARC** (je fournis les entrées si besoin)
+
+### C. PayPal (abonnements + crédits)
+
+* **Environnement** : sandbox ou live (prod)
+* **PayPal REST** : **Client ID** (live) + **Client Secret** (live)
+* **Business account e-mail** (affiché sur reçus PayPal)
+* **Webhook ID** (événements : `BILLING.SUBSCRIPTION.ACTIVATED`, `...UPDATED`, `...CANCELLED`, `PAYMENT.SALE.COMPLETED`)
+* **Return URL** : [https://tondomaine/checkout/success](https://tondomaine/checkout/success)
+* **Cancel URL** : [https://tondomaine/checkout/cancel](https://tondomaine/checkout/cancel)
+* **Devise par défaut** : CHF
+* **Plans d’abonnement** à créer (ou auto-créer) :
+
+  * Free (0 CHF) — limite : 1 vidéo « album » 60–90 s/mois, 720p, watermark
+  * Starter (mensuel/annuel) — prix, essai (jours), quotas (ex. 4 vidéos ≤3 min/mois, 1080p, 5 voix)
+  * Family (mensuel/annuel) — prix, quotas (ex. 12 vidéos/mois…)
+  * École (mensuel/annuel) — prix, quotas (illimité « album », PDF, 30 élèves)
+* **Crédits Animation IA** (paiement one‑off) : tailles de packs (ex. 10, 30, 60 minutes) + prix par pack
+* **Taxes** : prix **TTC** (incluant TVA CH 8.1%) ou **HT** + calcul TVA à la caisse ?
+
+### D. ElevenLabs (voix)
+
+* **ELEVENLABS\_API\_KEY** (plan **commercial**)
+* **Voix** à exposer : liste **Nom affiché → Voice ID** (FR femme douce, FR homme apaisant, FR‑CA, EN, PT‑BR…)
+* **Paramètres TTS** (vitesse, stabilité, clarté) — optionnel
+* **Langues actives** au lancement : FR (par défaut), EN, PT (optionnel)
+
+### E. Stockage & rendu
+
+* **S3/R2** : endpoint, access key, secret, bucket, région
+* **Base URL publique** des médias (CDN)
+* **Durée de rétention** (ex. 180 jours)
+* **Quota disque par compte** (ex. 10 Go)
+
+### F. Infra & workers
+
+* **URL publique du site** (APP\_BASE\_URL)
+* **Fournisseur jobs** (Render/Railway/Fly) si différent du front
+* **NEXTAUTH\_SECRET / JWT\_ENCRYPTION\_KEY** (générés, 32–64 chars)
+* **TZ** : Europe/Zurich
+
+### G. Analytics & cookies
+
+* **Plausible** ou **GA4** ID
+* Bandeau cookies : **essentiel seulement** (pas d’ads personnalisées)
+
+### H. Contenu & UX
+
+* **Logo** (SVG/PNG), favicon
+* **Palette** (ok avec celle par défaut sinon)
+* **Textes** : hero, 6 FAQ, CGU/Confidentialité (je fournis base), contact
+* **Exemples** : 2–3 mini‑vidéos démos (ou j’utilise des placeholders)
+
+### I. Sécurité & modération
+
+* **Liste mots/brands interdits** (Disney, Marvel, etc.)
+* **Âges autorisés** : 3–9
+* **Langages** : FR (par défaut), EN/PT si activés
+* **Pays de vente** (au début : CH) pour simplifier TVA
+
+> ⚠️ **Bonnes pratiques** : ne **jamais** hardcoder les clés dans le code. On les déclare en **variables d’environnement** et on limite les scopes (webhooks vérifiés, rôles lecture seule si possible).
+
+---
+
+## 18) **Nouveau prompt “one‑shot” manus.im** (PayPal + ElevenLabs)
+
+> Colle ce prompt dans manus.im. En haut, remplace les `YOUR_...` par tes valeurs. Le générateur doit : créer le site, configurer i18n, intégrer **PayPal Subscriptions + Checkout**, **ElevenLabs TTS**, stockage S3/R2, SMTP, webhooks, quotas/crédits, pages légales.
+
+```
+# === ENV À REMPLACER ===
+APP_BASE_URL=https://YOUR_DOMAIN
+PAYPAL_ENV=live
+PAYPAL_CLIENT_ID=YOUR_PAYPAL_CLIENT_ID
+PAYPAL_CLIENT_SECRET=YOUR_PAYPAL_CLIENT_SECRET
+PAYPAL_WEBHOOK_ID=YOUR_PAYPAL_WEBHOOK_ID
+PAYPAL_RETURN_URL=https://YOUR_DOMAIN/checkout/success
+PAYPAL_CANCEL_URL=https://YOUR_DOMAIN/checkout/cancel
+DEFAULT_CURRENCY=CHF
+ELEVENLABS_API_KEY=YOUR_ELEVENLABS_API_KEY
+ELEVENLABS_VOICE_IDS_JSON={"fr_femme_douce":"YOUR_VOICE_ID_1","fr_homme_apaisant":"YOUR_VOICE_ID_2","fr_ca_femme":"YOUR_VOICE_ID_3","en_gb_male":"YOUR_VOICE_ID_4","pt_br_female":"YOUR_VOICE_ID_5"}
+SMTP_HOST=YOUR_SMTP_HOST
+SMTP_PORT=587
+SMTP_USER=YOUR_SMTP_USER
+SMTP_PASS=YOUR_SMTP_PASS
+EMAIL_FROM="Histoires Magiques <support@YOUR_DOMAIN>"
+AWS_S3_ENDPOINT=YOUR_S3_ENDPOINT
+AWS_S3_REGION=YOUR_S3_REGION
+AWS_S3_ACCESS_KEY_ID=YOUR_S3_ACCESS_KEY
+AWS_S3_SECRET_ACCESS_KEY=YOUR_S3_SECRET
+AWS_S3_BUCKET=YOUR_S3_BUCKET
+NEXTAUTH_SECRET=YOUR_RANDOM_64C
+JWT_ENCRYPTION_KEY=YOUR_RANDOM_64C
+TZ=Europe/Zurich
+
+# === SPÉCIFICATIONS DU SITE ===
+Titre: Histoires Magiques — Générateur de vidéos pour enfants
+Langues: FR par défaut, EN secondaire (i18n)
+Design: moderne, chaleureux, arrondis 2xl, ombres douces, Poppins/Inter, palette bleu/rose/jaune/menthe/gris
+Accès: Auth par e‑mail (magic link), tableau de bord utilisateur avec quotas
+
+## Pages
+- Accueil (Hero, Comment ça marche, Exemples, Avis, CTA Pricing)
+- Créer une histoire (formulaire stepper 5 étapes, récap, bouton Générer → job queue)
+- Résultat (lecteur, Télécharger MP4/MP3/PDF, Régénérer)
+- Ma bibliothèque (grille filtrable)
+- Tarifs (Free/Starter/Family/École + crédits Animation IA)
+- Exemples (6 cartes)
+- FAQ (10 Q/R)
+- À propos / Contact
+- Mentions légales / CGU / Confidentialité
+
+## Paiements — **PayPal**
+- Implémenter **PayPal Subscriptions** (REST) et **Checkout one‑off** pour crédits
+- Créer/assurer l’existence d’un **Product** "Histoires Magiques" et des **Plans** à partir de ce JSON :
+PLANS_JSON=[
+ {"id":"free","type":"subscription","price":0,"currency":"CHF","interval":"month","features":{"videos_album_per_month":1,"max_duration_sec":90,"resolution":"720p","watermark":true}},
+ {"id":"starter_month","type":"subscription","price":12,"currency":"CHF","interval":"month","trial_days":7,
+  "features":{"videos_album_per_month":4,"max_duration_sec":180,"resolution":"1080p","voices":5,"mp3":true}},
+ {"id":"family_month","type":"subscription","price":24,"currency":"CHF","interval":"month",
+  "features":{"videos_album_per_month":12,"character_cards":true,"pdf_book":true}},
+ {"id":"school_month","type":"subscription","price":49,"currency":"CHF","interval":"month",
+  "features":{"album_unlimited":true,"students":30,"pdf_book":true}}
+]
+- Au premier déploiement : si `paypal_plan_id` manquant, **créer via API** et **persister** l’ID dans DB (table `billing_plans`)
+- Webhooks: `BILLING.SUBSCRIPTION.ACTIVATED|CANCELLED|SUSPENDED|PAYMENT.SALE.COMPLETED` → mettre à jour `subscriptions` (status, next_billing_time)
+- Checkout one‑off: "Crédits Animation IA" avec tarifs par minute définis dans `CREDITS_PRICING_JSON` (ex: {"per_min_chf":5, "packs":[10,30,60]})
+
+## Génération — pipeline
+- Endpoint `POST /api/generate-story` : reçoit le brief → appelle LLM pour produire un **JSON storyboard** (schéma fourni ci‑dessous)
+- Mode **Album**: par scène, générer 1 image 1920×1080 (provider stub), produire TTS ElevenLabs (voiceId depuis mapping), assembler avec FFmpeg (pan/zoom + sous‑titres), normaliser audio + BGM, exporter MP4 1080p et MP3
+- Mode **Animation IA** (add‑on): générer clips 5–10 s (provider stub), concat, audio idem
+- Stocker tous les assets dans S3/R2 (chemins signés), créer PDF livre (images + narration)
+
+## Quotas et crédits
+- Enforcer quotas selon plan (compteur vidéos/mois, durée max par vidéo).  
+- Décrémenter **crédits animation** à la seconde de clip généré.  
+- Watermark automatique pour le plan Free.
+
+## Modération & sécurité
+- Filtre prompts: refuser mots/brands interdits, contenus sensibles/violents/adultes.  
+- Comptes **parents/adultes**. Pas d’ads personnalisées.
+
+## E-mails
+- SMTP ci‑dessus; envoyer: confirmation compte, "histoire prête", facture PayPal (lien dans compte), reset mot de passe.
+
+## Storyboard JSON (schéma)
+- Voir section **Schéma JSON** ci‑après et implémenter validation.
+
+## DB (tables minimales)
+- users, stories, assets, jobs, subscriptions, billing_plans, usage_counters, animation_credits
+
+## Webhooks/Routes
+- `POST /api/webhook/paypal` (vérification signature + gestion events)  
+- `POST /api/webhook/tts` (optionnel si asynchrone)  
+- `GET /api/status?job_id=...`  
+
+## Légal
+- Générer pages CGU & Confidentialité (Suisse), mentions: service destiné aux parents/enseignants; données minimales; droit d’effacement.
+
+## Textes FR par défaut
+- Hero titre: « Des histoires vidéo personnalisées en 60 secondes. »  
+- Hero sous‑titre: « Choisissez le thème, les héros, la voix — nous créons la magie. »  
+- CTA: « Créer une histoire »
+
+# === SCHÉMA JSON STORYBOARD ===
+// Reprendre le schéma fourni dans la section 3 du document (meta, characters, scenes[...], closing)
+# === FIN ===
+```
+
+---
+
+## 19) Petit guide « secret‑safe »
+
+* Colle le prompt ci‑dessus dans manus.im **sans** clés → génère la base.
+* Ensuite, va dans l’onglet **Environment/Secrets** de l’hébergement et colle les **clés réelles** (PayPal, ElevenLabs, SMTP, S3…).
+* Tu peux aussi me transmettre les clés et je les **insère au bon format** dans la section ENV (à ton choix).

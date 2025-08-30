@@ -1,0 +1,31 @@
+# Histoires Magiques - Dépendances Python
+# Installation : pip install -r requirements.txt
+
+# Framework web
+Flask==3.0.0
+flask-cors==6.0.1
+
+# Intelligence Artificielle
+openai==1.102.0
+
+# Génération de PDF
+fpdf2==2.8.1
+
+# Requêtes HTTP
+requests==2.32.3
+
+# Variables d'environnement (optionnel mais recommandé)
+python-dotenv==1.0.1
+
+# Production (pour déploiement)
+gunicorn==21.2.0
+
+# Sécurité (optionnel)
+flask-talisman==1.1.0
+
+# Cache (optionnel)
+flask-caching==2.3.0
+
+# Rate limiting (optionnel)
+flask-limiter==3.8.0
+
