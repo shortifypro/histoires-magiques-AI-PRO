@@ -67,7 +67,8 @@ def init_db():
     conn.close()
 
 # --- créer/mettre à jour les tables au démarrage (idempotent) ---
-init_db()
+with app.app_context():
+    init_db()
 
 # Fonctions utilitaires
 def hash_password(password):
