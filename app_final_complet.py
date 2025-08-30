@@ -66,14 +66,8 @@ def init_db():
     conn.commit()
     conn.close()
 
-# --- créer/mettre à jour les tables au démarrage (sécurisé grâce aux IF NOT EXISTS) ---
-@app.before_first_request
-def _ensure_db():
-    try:
-        init_db()
-    except Exception as e:
-        app.logger.exception(f"DB init failed: {e}")
-
+# --- créer/mettre à jour les tables au démarrage (idempotent) ---
+init_db()
 
 # Fonctions utilitaires
 def hash_password(password):
