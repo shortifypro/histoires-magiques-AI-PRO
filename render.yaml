@@ -2,15 +2,23 @@ services:
   - type: web
     name: histoires-magiques-ai
     env: python
-    buildCommand: pip install -r requirements_final.txt
-    startCommand: gunicorn app_final_complet:app
+    buildCommand: pip install --upgrade pip && pip install -r requirements_final.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app_final_complet:app
     plan: free
     region: frankfurt
     envVars:
       - key: FLASK_ENV
         value: production
-      - key: FLASK_SECRET_KEY
+      - key: SECRET_KEY
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
-
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # optionnel selon ton app :
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
